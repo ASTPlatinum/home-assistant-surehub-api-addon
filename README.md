@@ -196,9 +196,9 @@ The following example creates sensors for food eaten today by two cats.
 Example details:
 
 ```text
-Household ID: 193138
-Dexter pet ID: 403676
-Bhalu pet ID: 752087
+Household ID: 193038
+Dexter pet ID: 403076
+Bhalu pet ID: 752007
 ```
 
 Change these IDs to match your own household and pet IDs.
@@ -217,7 +217,7 @@ add this to `sensor.yaml`:
 - platform: rest
   name: Dexter SureHub Feeding Report
   unique_id: dexter_surehub_feeding_report
-  resource_template: "http://HOME_ASSISTANT_IP:3001/households/193138/pets/403676/report?from={{ now().strftime('%Y-%m-%dT00:00:00Z') }}&to={{ now().strftime('%Y-%m-%dT23:59:59Z') }}"
+  resource_template: "http://HOME_ASSISTANT_IP:3001/households/193038/pets/403076/report?from={{ now().strftime('%Y-%m-%dT00:00:00Z') }}&to={{ now().strftime('%Y-%m-%dT23:59:59Z') }}"
   scan_interval: 300
   value_template: "OK"
   json_attributes_path: "$.feeding"
@@ -227,7 +227,7 @@ add this to `sensor.yaml`:
 - platform: rest
   name: Bhalu SureHub Feeding Report
   unique_id: bhalu_surehub_feeding_report
-  resource_template: "http://HOME_ASSISTANT_IP:3001/households/193138/pets/752087/report?from={{ now().strftime('%Y-%m-%dT00:00:00Z') }}&to={{ now().strftime('%Y-%m-%dT23:59:59Z') }}"
+  resource_template: "http://HOME_ASSISTANT_IP:3001/households/193038/pets/752007/report?from={{ now().strftime('%Y-%m-%dT00:00:00Z') }}&to={{ now().strftime('%Y-%m-%dT23:59:59Z') }}"
   scan_interval: 300
   value_template: "OK"
   json_attributes_path: "$.feeding"
