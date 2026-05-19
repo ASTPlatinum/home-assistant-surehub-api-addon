@@ -211,7 +211,7 @@ If you use a separate `sensor.yaml` file included with:
 sensor: !include sensor.yaml
 ```
 
-add this to `sensor.yaml`:
+add this to `sensor.yaml`: Remember to change the household & pet ID's to suite.
 
 ```yaml
 - platform: rest
