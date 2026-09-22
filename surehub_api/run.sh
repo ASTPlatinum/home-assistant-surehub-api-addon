@@ -22,4 +22,4 @@ echo "  password set: yes"
 
 cd /app/surehub-api
 
-exec /app/venv/bin/uvicorn surehub_api.main:app --host "0.0.0.0" --port "${PORT}"
+exec /app/venv/bin/uvicorn custom_main:app --host "0.0.0.0" --port "${PORT}"
