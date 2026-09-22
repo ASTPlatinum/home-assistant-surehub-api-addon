@@ -1,14 +1,16 @@
 """Home Assistant add-on extensions for the upstream SureHub API.
 
-Adds per-tag access mode endpoints while reusing the upstream SureHub API
-authentication, token cache, request handling, and configured endpoint.
+Adds convenience endpoints for pet access and location while reusing the
+upstream SureHub API authentication, token cache, request handling, and
+configured endpoint.
 """
 
 from typing import Any
 
 from surehub_api.config import settings
+from surehub_api.entities import dto, official
 from surehub_api.main import app
-from surehub_api.services import api
+from surehub_api.services import api, pets
 from surehub_api.utils import response_handler
 
 PROFILE_NORMAL = 2
@@ -48,6 +50,21 @@ def _set_tag_profile(device_id: int, tag_id: int, profile: int) -> dict[str, Any
     }
 
 
+def _set_pet_position(
+    pet_id: int,
+    position: official.PetPositionWhere,
+) -> dict[str, Any]:
+    payload = dto.UpdatePetStateRequest(position=position)
+    pets.update_pet_state(pet_id, payload)
+
+    return {
+        "ok": True,
+        "pet_id": pet_id,
+        "position": int(position),
+        "location": "inside" if position == official.PetPositionWhere.INSIDE else "outside",
+    }
+
+
 @app.post(
     "/devices/{device_id}/tags/{tag_id}/indoor-only",
     tags=["Pet access"],
@@ -64,3 +81,21 @@ def set_tag_indoor_only(device_id: int, tag_id: int) -> dict[str, Any]:
 )
 def set_tag_normal(device_id: int, tag_id: int) -> dict[str, Any]:
     return _set_tag_profile(device_id, tag_id, PROFILE_NORMAL)
+
+
+@app.post(
+    "/pets/{pet_id}/inside",
+    tags=["Pet location"],
+    summary="Set pet location to inside",
+)
+def set_pet_inside(pet_id: int) -> dict[str, Any]:
+    return _set_pet_position(pet_id, official.PetPositionWhere.INSIDE)
+
+
+@app.post(
+    "/pets/{pet_id}/outside",
+    tags=["Pet location"],
+    summary="Set pet location to outside",
+)
+def set_pet_outside(pet_id: int) -> dict[str, Any]:
+    return _set_pet_position(pet_id, official.PetPositionWhere.OUTSIDE)
