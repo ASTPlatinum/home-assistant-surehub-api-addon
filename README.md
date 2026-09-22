@@ -462,3 +462,44 @@ rest_command:
 ```
 
 Do not expose port 3001 to the internet. These endpoints can change whether a registered pet is allowed to leave through the flap.
+
+
+## Manual pet location
+
+Version 0.3.0 adds convenience endpoints for manually setting a pet's Sure Petcare location.
+
+Set a pet to inside:
+
+```text
+POST /pets/{pet_id}/inside
+```
+
+Set a pet to outside:
+
+```text
+POST /pets/{pet_id}/outside
+```
+
+These use the upstream SureHub pet state API. Sure Petcare represents inside as position `1` and outside as position `2`.
+
+Example:
+
+```bash
+curl -X POST http://HOME_ASSISTANT_IP:3001/pets/PET_ID/inside
+curl -X POST http://HOME_ASSISTANT_IP:3001/pets/PET_ID/outside
+```
+
+### Home Assistant REST commands
+
+```yaml
+rest_command:
+  cat_location_inside:
+    url: "http://HOME_ASSISTANT_IP:3001/pets/PET_ID/inside"
+    method: POST
+
+  cat_location_outside:
+    url: "http://HOME_ASSISTANT_IP:3001/pets/PET_ID/outside"
+    method: POST
+```
+
+These endpoints manually change the location recorded in Sure Petcare. They do not physically operate or lock the flap.
