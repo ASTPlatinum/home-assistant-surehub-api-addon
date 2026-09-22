@@ -411,3 +411,54 @@ https://github.com/fabieu/surehub-api
 ```
 
 This repository only provides a Home Assistant add-on wrapper around that project.
+
+
+## Indoor-only cat access
+
+Version 0.2.0 adds local endpoints for changing an individual registered tag between normal access and indoor-only mode.
+
+The add-on reuses the upstream SureHub API authentication and token handling. Home Assistant does not need to store a separate Sure Petcare token.
+
+### Endpoints
+
+Set a registered tag to indoor-only:
+
+```text
+POST /devices/{device_id}/tags/{tag_id}/indoor-only
+```
+
+Return a registered tag to normal access:
+
+```text
+POST /devices/{device_id}/tags/{tag_id}/normal
+```
+
+Sure Petcare currently uses profile `3` for indoor-only and profile `2` for normal access.
+
+Example:
+
+```bash
+curl -X POST http://HOME_ASSISTANT_IP:3001/devices/DEVICE_ID/tags/TAG_ID/indoor-only
+curl -X POST http://HOME_ASSISTANT_IP:3001/devices/DEVICE_ID/tags/TAG_ID/normal
+```
+
+After updating the add-on, these endpoints also appear in the Swagger documentation at:
+
+```text
+http://HOME_ASSISTANT_IP:3001/docs
+```
+
+### Home Assistant REST commands
+
+```yaml
+rest_command:
+  cat_indoor_only:
+    url: "http://HOME_ASSISTANT_IP:3001/devices/DEVICE_ID/tags/TAG_ID/indoor-only"
+    method: POST
+
+  cat_normal_access:
+    url: "http://HOME_ASSISTANT_IP:3001/devices/DEVICE_ID/tags/TAG_ID/normal"
+    method: POST
+```
+
+Do not expose port 3001 to the internet. These endpoints can change whether a registered pet is allowed to leave through the flap.
