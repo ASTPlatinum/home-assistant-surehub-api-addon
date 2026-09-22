@@ -1,5 +1,5 @@
 name: SureHub API
-version: "0.2.0"
+version: "0.3.0"
 slug: surehub_api
 description: Unofficial Sure Petcare REST API bridge
 url: "https://github.com/ASTPlatinum/home-assistant-surehub-api-addon"
