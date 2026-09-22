@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Add convenience endpoints for manually setting a pet location.
+- Add `POST /pets/{pet_id}/inside`.
+- Add `POST /pets/{pet_id}/outside`.
+- Reuse the upstream SureHub pet-state service for location changes.
+- Document Home Assistant REST command examples for pet location control.
+
+# Changelog
+
 ## 0.2.0
 
 - Add per-cat indoor-only access control.
