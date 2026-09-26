@@ -4,6 +4,7 @@ Adds convenience endpoints for pet access and location, battery reporting,
 and MQTT Discovery for Sure Petcare battery sensors.
 """
 
+import atexit
 import json
 import logging
 import os
@@ -363,5 +364,5 @@ def get_batteries() -> dict[str, Any]:
     }
 
 
-app.add_event_handler("startup", _start_mqtt)
-app.add_event_handler("shutdown", _stop_mqtt)
+_start_mqtt()
+atexit.register(_stop_mqtt)
