@@ -16,7 +16,7 @@ WORKDIR /app/surehub-api
 
 RUN python3 -m venv /app/venv \
     && /app/venv/bin/pip install --upgrade pip setuptools wheel \
-    && /app/venv/bin/pip install --no-cache-dir .
+    && /app/venv/bin/pip install --no-cache-dir . "paho-mqtt>=2.1,<3.0"
 
 COPY custom_main.py /app/surehub-api/custom_main.py
 COPY run.sh /run.sh
