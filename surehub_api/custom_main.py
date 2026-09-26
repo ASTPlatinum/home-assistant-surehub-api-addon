@@ -23,6 +23,9 @@ LOGGER = logging.getLogger("surehub_mqtt")
 
 PROFILE_NORMAL = 2
 PROFILE_INDOOR_ONLY = 3
+FEEDER_CONNECT_PRODUCT_ID = 4
+TARE_SINGLE_BOWL = 1
+APP_VERSION = "0.4.2"
 
 BATTERY_VOLTAGE_FULL_PER_CELL = 1.6
 BATTERY_VOLTAGE_LOW_PER_CELL = 1.2
@@ -63,6 +66,40 @@ def _set_tag_profile(device_id: int, tag_id: int, profile: int) -> dict[str, Any
         "tag_id": tag_id,
         "profile": profile,
         "mode": "indoor_only" if profile == PROFILE_INDOOR_ONLY else "normal",
+        "upstream_response": upstream_response,
+    }
+
+def _tare_feeder(device_id: int) -> dict[str, Any]:
+    """Zero a single-bowl Feeder Connect. The feeder lid must be open."""
+    devices = _get_battery_devices()
+    feeder = next(
+        (
+            device
+            for device in devices
+            if device.get("id") == device_id
+            and device.get("product_id") == FEEDER_CONNECT_PRODUCT_ID
+        ),
+        None,
+    )
+    if feeder is None:
+        raise ValueError(f"Device {device_id} is not a Feeder Connect")
+
+    uri = f"{settings.endpoint}/api/device/{device_id}/control/async"
+    response = api.put(uri, json={"tare": TARE_SINGLE_BOWL})
+    response_handler.raise_for_status(response)
+
+    upstream_response: Any = None
+    if response.content:
+        try:
+            upstream_response = response.json()
+        except ValueError:
+            upstream_response = response.text
+
+    return {
+        "ok": True,
+        "device_id": device_id,
+        "name": feeder.get("name"),
+        "tare": TARE_SINGLE_BOWL,
         "upstream_response": upstream_response,
     }
 
@@ -154,7 +191,7 @@ def _mqtt_publish_device(
         },
         "origin": {
             "name": "SureHub API",
-            "sw": "0.4.0",
+            "sw": APP_VERSION,
             "url": "https://github.com/ASTPlatinum/home-assistant-surehub-api-addon",
         },
     }
@@ -188,20 +225,148 @@ def _mqtt_publish_device(
     )
 
 
+def _mqtt_publish_zero_bowl_button(
+    client: mqtt.Client,
+    device: dict[str, Any],
+) -> None:
+    """Publish a Home Assistant MQTT button for feeder tare/zero."""
+    device_id = device.get("id")
+    if device_id is None or device.get("product_id") != FEEDER_CONNECT_PRODUCT_ID:
+        return
+
+    object_id = f"surehub_{device_id}_zero_bowl"
+    command_topic = f"{MQTT_TOPIC_PREFIX}/devices/{device_id}/zero_bowl/set"
+    availability_topic = f"{MQTT_TOPIC_PREFIX}/devices/{device_id}/availability"
+    discovery_topic = f"{MQTT_DISCOVERY_PREFIX}/button/{object_id}/config"
+
+    discovery_payload = {
+        "name": "Zero Bowl",
+        "unique_id": object_id,
+        "default_entity_id": f"button.{object_id}",
+        "command_topic": command_topic,
+        "payload_press": "PRESS",
+        "availability_topic": availability_topic,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+        "icon": "mdi:scale-balance",
+        "device": {
+            "identifiers": [f"surehub_{device_id}"],
+            "name": device.get("name") or f"SureHub device {device_id}",
+            "manufacturer": "Sure Petcare",
+            "model": f"Product {device.get('product_id')}",
+        },
+        "origin": {
+            "name": "SureHub API",
+            "sw": APP_VERSION,
+            "url": "https://github.com/ASTPlatinum/home-assistant-surehub-api-addon",
+        },
+    }
+
+    client.publish(
+        discovery_topic,
+        json.dumps(discovery_payload),
+        qos=1,
+        retain=True,
+    )
+    client.publish(
+        availability_topic,
+        "online" if device.get("online") is not False else "offline",
+        qos=1,
+        retain=True,
+    )
+
+
+def _mqtt_zero_bowl_worker(device_id: int) -> None:
+    try:
+        result = _tare_feeder(device_id)
+        LOGGER.info(
+            "Zero bowl command sent to %s (%s)",
+            result.get("name"),
+            device_id,
+        )
+    except Exception:
+        LOGGER.exception("Failed to zero feeder bowl for device %s", device_id)
+
+
+def _mqtt_on_connect(
+    client: mqtt.Client,
+    userdata: Any,
+    flags: Any,
+    reason_code: Any,
+    properties: Any,
+) -> None:
+    if getattr(reason_code, "is_failure", False):
+        LOGGER.error("MQTT connection rejected: %s", reason_code)
+        return
+
+    client.subscribe(
+        f"{MQTT_TOPIC_PREFIX}/devices/+/zero_bowl/set",
+        qos=1,
+    )
+    client.publish(
+        f"{MQTT_TOPIC_PREFIX}/status",
+        "online",
+        qos=1,
+        retain=True,
+    )
+    LOGGER.info("Subscribed to SureHub zero-bowl MQTT commands")
+
+
+def _mqtt_on_message(
+    client: mqtt.Client,
+    userdata: Any,
+    message: Any,
+) -> None:
+    if message.payload.decode(errors="ignore").strip().upper() != "PRESS":
+        return
+
+    parts = message.topic.split("/")
+    if (
+        len(parts) != 5
+        or parts[0] != MQTT_TOPIC_PREFIX
+        or parts[1] != "devices"
+        or parts[3] != "zero_bowl"
+        or parts[4] != "set"
+    ):
+        return
+
+    try:
+        device_id = int(parts[2])
+    except ValueError:
+        return
+
+    threading.Thread(
+        target=_mqtt_zero_bowl_worker,
+        args=(device_id,),
+        name=f"surehub-tare-{device_id}",
+        daemon=True,
+    ).start()
+
+
 def _mqtt_publish_all(client: mqtt.Client) -> None:
-    """Publish battery sensors for devices that actually report a battery."""
+    """Publish battery sensors and feeder controls through MQTT Discovery."""
+    devices = _get_battery_devices()
     battery_devices = [
         device
-        for device in _get_battery_devices()
+        for device in devices
         if device["battery_voltage"] is not None
+    ]
+    feeder_devices = [
+        device
+        for device in devices
+        if device.get("product_id") == FEEDER_CONNECT_PRODUCT_ID
     ]
 
     for device in battery_devices:
         _mqtt_publish_device(client, device)
 
+    for device in feeder_devices:
+        _mqtt_publish_zero_bowl_button(client, device)
+
     LOGGER.info(
-        "Published %d SureHub battery sensor(s) through MQTT Discovery",
+        "Published %d battery sensor(s) and %d zero-bowl button(s) through MQTT Discovery",
         len(battery_devices),
+        len(feeder_devices),
     )
 
 
@@ -230,6 +395,9 @@ def _mqtt_worker() -> None:
             if username:
                 client.username_pw_set(username, password)
 
+            client.on_connect = _mqtt_on_connect
+            client.on_message = _mqtt_on_message
+
             client.will_set(
                 f"{MQTT_TOPIC_PREFIX}/status",
                 "offline",
@@ -238,20 +406,14 @@ def _mqtt_worker() -> None:
             )
             client.connect(host, port, keepalive=60)
             client.loop_start()
-            client.publish(
-                f"{MQTT_TOPIC_PREFIX}/status",
-                "online",
-                qos=1,
-                retain=True,
-            )
 
-            LOGGER.info("Connected to MQTT broker at %s:%s", host, port)
+            LOGGER.info("Connecting to MQTT broker at %s:%s", host, port)
 
             while not _mqtt_stop_event.is_set():
                 try:
                     _mqtt_publish_all(client)
                 except Exception:
-                    LOGGER.exception("Failed to refresh SureHub MQTT battery sensors")
+                    LOGGER.exception("Failed to refresh SureHub MQTT entities")
 
                 _mqtt_stop_event.wait(refresh_seconds)
 
@@ -346,6 +508,15 @@ def set_pet_inside(pet_id: int) -> dict[str, Any]:
 )
 def set_pet_outside(pet_id: int) -> dict[str, Any]:
     return _set_pet_position(pet_id, official.PetPositionWhere.OUTSIDE)
+
+
+@app.post(
+    "/devices/{device_id}/zero-bowl",
+    tags=["Feeder"],
+    summary="Zero a single feeder bowl",
+)
+def zero_feeder_bowl(device_id: int) -> dict[str, Any]:
+    return _tare_feeder(device_id)
 
 
 @app.get(
