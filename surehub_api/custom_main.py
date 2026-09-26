@@ -99,3 +99,18 @@ def set_pet_inside(pet_id: int) -> dict[str, Any]:
 )
 def set_pet_outside(pet_id: int) -> dict[str, Any]:
     return _set_pet_position(pet_id, official.PetPositionWhere.OUTSIDE)
+
+
+@app.get(
+    "/debug/devices/raw",
+    tags=["Debug"],
+    summary="Get raw Sure Petcare device payload",
+)
+def get_raw_devices() -> Any:
+    uri = f"{settings.endpoint}/api/device"
+    response = api.get(uri)
+    response_handler.raise_for_status(response)
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise ValueError("Sure Petcare returned non-JSON device data") from exc
