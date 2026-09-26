@@ -543,3 +543,34 @@ sensor.surehub_1338734_battery
 ```
 
 Home Assistant MQTT Discovery is enabled by default when using the standard `homeassistant` discovery prefix.
+
+
+## MQTT Zero Bowl buttons
+
+Version 0.4.2 adds a Home Assistant MQTT button for each SureFeed Feeder Connect device:
+
+```text
+Zero Bowl
+```
+
+The button is discovered automatically through MQTT and is grouped with the same Sure Petcare device as its battery sensor. No Home Assistant YAML is required.
+
+For a single/large bowl, the app sends Sure Petcare tare value `1` through:
+
+```text
+PUT /api/device/{device_id}/control/async
+```
+
+with:
+
+```json
+{"tare": 1}
+```
+
+The feeder lid must be open when the command is sent.
+
+A direct local API endpoint is also available for testing:
+
+```text
+POST /devices/{device_id}/zero-bowl
+```
