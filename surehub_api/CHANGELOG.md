@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1
+
+- Add temporary raw device endpoint at `GET /debug/devices/raw`.
+- This exposes the unfiltered Sure Petcare device payload so fields such as battery data can be identified.
+- Use a non-conflicting `/debug` path because `/devices/{device_id}` treats arbitrary text after `/devices/` as a device ID.
+
+# Changelog
+
 ## 0.3.0
 
 - Add convenience endpoints for manually setting a pet location.
