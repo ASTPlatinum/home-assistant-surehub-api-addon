@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Add automatic Home Assistant battery entities through MQTT Discovery.
+- Use the Home Assistant Supervisor MQTT service connection, so no broker credentials need to be entered in the SureHub app.
+- Publish one battery sensor per Sure Petcare device that reports a battery.
+- Do not create a battery sensor for the Sure Petcare hub because it has no battery value.
+- Publish battery voltage, online state, device ID, product ID, and serial number as sensor attributes.
+- Refresh Sure Petcare battery readings every 5 minutes.
+- Add the Sure Petcare device name to the Home Assistant MQTT device registry entry.
+
 ## 0.3.2
 
 - Add `GET /batteries` with each Sure Petcare device name, ID, product ID, serial number, online state, raw battery voltage, and estimated battery percentage.
