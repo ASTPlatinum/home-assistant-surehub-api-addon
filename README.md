@@ -503,3 +503,22 @@ rest_command:
 ```
 
 These endpoints manually change the location recorded in Sure Petcare. They do not physically operate or lock the flap.
+
+
+## Device battery levels
+
+Version 0.3.2 adds a compact endpoint for device battery information:
+
+```text
+GET /batteries
+```
+
+Example:
+
+```text
+http://HOME_ASSISTANT_IP:3001/batteries
+```
+
+The response includes every Sure Petcare device with its name, device ID, product ID, serial number, online state, raw battery voltage, and estimated battery percentage. Devices without a battery are included with null battery values.
+
+The percentage calculation follows the established surepy four-cell battery curve, using 1.2 V per cell as 0% and 1.6 V per cell as 100%, clamped to 0–100%.
