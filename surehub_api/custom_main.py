@@ -1,11 +1,16 @@
-"""Home Assistant add-on extensions for the upstream SureHub API.
+"""Home Assistant app extensions for the upstream SureHub API.
 
-Adds convenience endpoints for pet access and location while reusing the
-upstream SureHub API authentication, token cache, request handling, and
-configured endpoint.
+Adds convenience endpoints for pet access and location, battery reporting,
+and MQTT Discovery for Sure Petcare battery sensors.
 """
 
+import json
+import logging
+import os
+import threading
 from typing import Any
+
+from paho.mqtt import client as mqtt
 
 from surehub_api.config import settings
 from surehub_api.entities import dto, official
@@ -13,12 +18,19 @@ from surehub_api.main import app
 from surehub_api.services import api, pets
 from surehub_api.utils import response_handler
 
+LOGGER = logging.getLogger("surehub_mqtt")
+
 PROFILE_NORMAL = 2
 PROFILE_INDOOR_ONLY = 3
 
 BATTERY_VOLTAGE_FULL_PER_CELL = 1.6
 BATTERY_VOLTAGE_LOW_PER_CELL = 1.2
 BATTERY_CELL_COUNT = 4
+
+MQTT_DISCOVERY_PREFIX = "homeassistant"
+MQTT_TOPIC_PREFIX = "surehub"
+_mqtt_stop_event = threading.Event()
+_mqtt_thread: threading.Thread | None = None
 
 
 def _set_tag_profile(device_id: int, tag_id: int, profile: int) -> dict[str, Any]:
@@ -93,13 +105,191 @@ def _get_battery_devices() -> list[dict[str, Any]]:
                 "name": device.get("name"),
                 "product_id": device.get("product_id"),
                 "serial_number": device.get("serial_number"),
-                "online": device.get("online"),
+                "online": device.get("online", status.get("online")),
                 "battery_voltage": battery_voltage,
                 "battery_percent": _battery_percent(battery_voltage),
             }
         )
 
     return devices
+
+
+def _mqtt_publish_device(
+    client: mqtt.Client,
+    device: dict[str, Any],
+) -> None:
+    """Publish one battery device using Home Assistant MQTT Discovery."""
+    device_id = device["id"]
+    if device_id is None or device["battery_voltage"] is None:
+        return
+
+    object_id = f"surehub_{device_id}_battery"
+    state_topic = f"{MQTT_TOPIC_PREFIX}/devices/{device_id}/battery"
+    availability_topic = f"{MQTT_TOPIC_PREFIX}/devices/{device_id}/availability"
+    discovery_topic = (
+        f"{MQTT_DISCOVERY_PREFIX}/sensor/{object_id}/config"
+    )
+
+    discovery_payload = {
+        "name": "Battery",
+        "unique_id": object_id,
+        "default_entity_id": f"sensor.{object_id}",
+        "device_class": "battery",
+        "state_class": "measurement",
+        "unit_of_measurement": "%",
+        "suggested_display_precision": 0,
+        "entity_category": "diagnostic",
+        "state_topic": state_topic,
+        "value_template": "{{ value_json.battery_percent }}",
+        "json_attributes_topic": state_topic,
+        "availability_topic": availability_topic,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+        "device": {
+            "identifiers": [f"surehub_{device_id}"],
+            "name": device.get("name") or f"SureHub device {device_id}",
+            "manufacturer": "Sure Petcare",
+            "model": f"Product {device.get('product_id')}",
+        },
+        "origin": {
+            "name": "SureHub API",
+            "sw": "0.4.0",
+            "url": "https://github.com/ASTPlatinum/home-assistant-surehub-api-addon",
+        },
+    }
+
+    state_payload = {
+        "battery_percent": device["battery_percent"],
+        "battery_voltage": device["battery_voltage"],
+        "online": device.get("online"),
+        "device_id": device_id,
+        "product_id": device.get("product_id"),
+        "serial_number": device.get("serial_number"),
+    }
+
+    client.publish(
+        discovery_topic,
+        json.dumps(discovery_payload),
+        qos=1,
+        retain=True,
+    )
+    client.publish(
+        state_topic,
+        json.dumps(state_payload),
+        qos=1,
+        retain=True,
+    )
+    client.publish(
+        availability_topic,
+        "online" if device.get("online") is not False else "offline",
+        qos=1,
+        retain=True,
+    )
+
+
+def _mqtt_publish_all(client: mqtt.Client) -> None:
+    """Publish battery sensors for devices that actually report a battery."""
+    battery_devices = [
+        device
+        for device in _get_battery_devices()
+        if device["battery_voltage"] is not None
+    ]
+
+    for device in battery_devices:
+        _mqtt_publish_device(client, device)
+
+    LOGGER.info(
+        "Published %d SureHub battery sensor(s) through MQTT Discovery",
+        len(battery_devices),
+    )
+
+
+def _mqtt_worker() -> None:
+    host = os.getenv("SUREHUB_MQTT_HOST")
+    if not host:
+        LOGGER.info("MQTT Discovery disabled because no MQTT service is available")
+        return
+
+    port = int(os.getenv("SUREHUB_MQTT_PORT", "1883"))
+    username = os.getenv("SUREHUB_MQTT_USER") or None
+    password = os.getenv("SUREHUB_MQTT_PASSWORD") or None
+    refresh_seconds = max(
+        60,
+        int(os.getenv("SUREHUB_MQTT_REFRESH_SECONDS", "300")),
+    )
+
+    while not _mqtt_stop_event.is_set():
+        client: mqtt.Client | None = None
+        try:
+            client = mqtt.Client(
+                mqtt.CallbackAPIVersion.VERSION2,
+                client_id="surehub-api",
+            )
+
+            if username:
+                client.username_pw_set(username, password)
+
+            client.will_set(
+                f"{MQTT_TOPIC_PREFIX}/status",
+                "offline",
+                qos=1,
+                retain=True,
+            )
+            client.connect(host, port, keepalive=60)
+            client.loop_start()
+            client.publish(
+                f"{MQTT_TOPIC_PREFIX}/status",
+                "online",
+                qos=1,
+                retain=True,
+            )
+
+            LOGGER.info("Connected to MQTT broker at %s:%s", host, port)
+
+            while not _mqtt_stop_event.is_set():
+                try:
+                    _mqtt_publish_all(client)
+                except Exception:
+                    LOGGER.exception("Failed to refresh SureHub MQTT battery sensors")
+
+                _mqtt_stop_event.wait(refresh_seconds)
+
+        except Exception:
+            LOGGER.exception("MQTT connection failed; retrying in 30 seconds")
+            _mqtt_stop_event.wait(30)
+
+        finally:
+            if client is not None:
+                try:
+                    client.loop_stop()
+                    client.disconnect()
+                except Exception:
+                    pass
+
+
+def _start_mqtt() -> None:
+    global _mqtt_thread
+
+    if not os.getenv("SUREHUB_MQTT_HOST"):
+        LOGGER.info("MQTT Discovery is not configured")
+        return
+
+    if _mqtt_thread is not None and _mqtt_thread.is_alive():
+        return
+
+    _mqtt_stop_event.clear()
+    _mqtt_thread = threading.Thread(
+        target=_mqtt_worker,
+        name="surehub-mqtt",
+        daemon=True,
+    )
+    _mqtt_thread.start()
+
+
+def _stop_mqtt() -> None:
+    _mqtt_stop_event.set()
+    if _mqtt_thread is not None:
+        _mqtt_thread.join(timeout=5)
 
 
 def _set_pet_position(
@@ -113,7 +303,11 @@ def _set_pet_position(
         "ok": True,
         "pet_id": pet_id,
         "position": int(position),
-        "location": "inside" if position == official.PetPositionWhere.INSIDE else "outside",
+        "location": (
+            "inside"
+            if position == official.PetPositionWhere.INSIDE
+            else "outside"
+        ),
     }
 
 
@@ -167,3 +361,7 @@ def get_batteries() -> dict[str, Any]:
         ),
         "devices": devices,
     }
+
+
+app.add_event_handler("startup", _start_mqtt)
+app.add_event_handler("shutdown", _stop_mqtt)
