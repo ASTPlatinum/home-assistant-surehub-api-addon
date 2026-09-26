@@ -1,12 +1,18 @@
 # Changelog
 
+## 0.3.2
+
+- Add `GET /batteries` with each Sure Petcare device name, ID, product ID, serial number, online state, raw battery voltage, and estimated battery percentage.
+- Battery percentage uses the established surepy 4-cell calculation: 1.2 V per cell = 0% and 1.6 V per cell = 100%, clamped to 0–100%.
+- Devices without a battery, such as the hub, are still returned with null battery values.
+- Remove the temporary raw-device debug endpoint now that the battery field has been identified.
+
 ## 0.3.1
 
 - Add temporary raw device endpoint at `GET /debug/devices/raw`.
 - This exposes the unfiltered Sure Petcare device payload so fields such as battery data can be identified.
 - Use a non-conflicting `/debug` path because `/devices/{device_id}` treats arbitrary text after `/devices/` as a device ID.
 
-# Changelog
 
 ## 0.3.0
 
@@ -16,7 +22,6 @@
 - Reuse the upstream SureHub pet-state service for location changes.
 - Document Home Assistant REST command examples for pet location control.
 
-# Changelog
 
 ## 0.2.0
 
