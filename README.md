@@ -522,3 +522,24 @@ http://HOME_ASSISTANT_IP:3001/batteries
 The response includes every Sure Petcare device with its name, device ID, product ID, serial number, online state, raw battery voltage, and estimated battery percentage. Devices without a battery are included with null battery values.
 
 The percentage calculation follows the established surepy four-cell battery curve, using 1.2 V per cell as 0% and 1.6 V per cell as 100%, clamped to 0–100%.
+
+
+## Automatic MQTT battery sensors
+
+Version 0.4.0 can publish Sure Petcare battery devices directly into Home Assistant using MQTT Discovery.
+
+If the Home Assistant MQTT integration and an MQTT broker such as Mosquitto are already available, the app obtains the broker connection through the Home Assistant Supervisor services API. No MQTT host, username, password, or Home Assistant YAML sensor configuration is required.
+
+The app publishes one battery sensor for each Sure Petcare device that reports a battery. Devices without battery data, including the Sure Petcare hub, are skipped.
+
+Battery sensors are refreshed every 5 minutes and include the raw battery voltage, online state, device ID, product ID, and serial number as attributes.
+
+The discovered sensors use stable entity IDs based on the Sure Petcare device ID, for example:
+
+```text
+sensor.surehub_1108923_battery
+sensor.surehub_1111956_battery
+sensor.surehub_1338734_battery
+```
+
+Home Assistant MQTT Discovery is enabled by default when using the standard `homeassistant` discovery prefix.
