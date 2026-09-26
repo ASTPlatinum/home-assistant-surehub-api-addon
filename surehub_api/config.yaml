@@ -1,5 +1,5 @@
 name: SureHub API
-version: "0.3.2"
+version: "0.4.0"
 slug: surehub_api
 description: Unofficial Sure Petcare REST API bridge
 url: "https://github.com/ASTPlatinum/home-assistant-surehub-api-addon"
@@ -8,6 +8,8 @@ arch:
 startup: services
 boot: auto
 init: false
+services:
+  - mqtt:want
 build_from:
   amd64: ghcr.io/home-assistant/amd64-base:latest
 ports:
