@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Fix startup crash with FastAPI 0.136+, where `add_event_handler` is no longer available on the app object.
+- Start the MQTT discovery worker directly when the app module loads.
+- Register MQTT shutdown cleanup with Python `atexit` instead of FastAPI lifecycle hooks.
+
 ## 0.4.0
 
 - Add automatic Home Assistant battery entities through MQTT Discovery.
