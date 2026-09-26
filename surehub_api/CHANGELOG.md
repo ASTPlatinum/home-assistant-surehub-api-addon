@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2
+
+- Add automatic MQTT Discovery buttons named `Zero Bowl` for SureFeed Feeder Connect devices.
+- Subscribe to each feeder's MQTT command topic and send Sure Petcare tare value `1`, which zeros a single/large bowl.
+- Add `POST /devices/{device_id}/zero-bowl` for direct testing and API use.
+- Keep the tare action restricted to product ID `4` Feeder Connect devices.
+- The feeder lid must be open when the zero command is sent.
+- Group the Zero Bowl button with the existing battery sensor under the same Home Assistant MQTT device.
+
 ## 0.4.1
 
 - Fix startup crash with FastAPI 0.136+, where `add_event_handler` is no longer available on the app object.
